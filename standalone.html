@@ -19,8 +19,8 @@
   <body>
     <canvas></canvas>
     <script type='module'>
-      import screamer from './screamer.js'
-      screamer.init()
+      import Screamer from './screamer.js'
+      let screamer = new Screamer({});
 
       const c  = document.querySelector('canvas')
       c.width  = window.innerWidth

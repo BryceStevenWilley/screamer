@@ -1,3 +1,5 @@
+import {parse} from './screamer-lang2.js'
+
 const globals = {}
 
 // ernie's favorite number
@@ -22,52 +24,68 @@ const mods = {
   '~':  'Twist'
 }
  
-const mouse = { x:0, y:0 }
-const osc = {}
-const vecMembers = ['x','y','z','w']
 
-const screamer = {
-  __i:0,
-  DO_NOT_RESET_CAMERA:false,
-  
-  config : {
-    shadow: .2,
-    foreground:null,
-    render: 'med',
-    fog: [0,0,0,0],
-    background:[0,0,0],
-    post: [],
-    voxel:.1,
-    camera: [0,0,5],
-    fft: 512,
-    lighting:null,
-    zoom:null
-  },
+class Screamer {
 
-  textures: {},
+  constructor({shouldInitHydra = true}) {
+    this.__i = 0;
+    this.DO_NOT_RESET_CAMERA = false;
+    this.config = {
+      shadow: .2,
+      foreground:null,
+      render: 'med',
+      fog: [0,0,0,0],
+      background:[0,0,0],
+      post: [],
+      voxel:.1,
+      camera: [0,0,5],
+      fft: 512,
+      lighting:null,
+      zoom:null
+    };
+    this.textures = {};
+    this.mouse = { x:0, y:0 }
+    this.osc = {}
+    this.vecMembers = ['x','y','z','w']
 
-  init( shouldInitHydra = true ) {
-    window.onpointermove = function(e) {
-      mouse.x = e.clientX / window.innerWidth
-      mouse.y = e.clientY / window.innerHeight
+    this.walkers = {
+      'assignment': this.assignment.bind(this),
+      'color': this.color.bind(this),
+      'combinator': this.combinator.bind(this),
+      'comment': this.comment.bind(this),
+      'config': this.configWalk.bind(this),
+      'geometry': this.geometry.bind(this),
+      'hydra': this.hydra.bind(this),
+      'loop': this.loop.bind(this),
+      'math': this.math.bind(this),
+      'osc': this.oscWalk.bind(this),
+      'mod': this.mod.bind(this),
+      'string': this.string.bind(this),
+      'vec': this.vec.bind(this)
+    };
+    this.libs = {};
+
+    window.onpointermove = (e) => {
+      this.mouse.x = e.clientX / window.innerWidth
+      this.mouse.y = e.clientY / window.innerHeight
     }
 
-    if( shouldInitHydra ) screamer.initHydra()
-
-    return this
-  },
-
+    if( shouldInitHydra ) {
+      this.initHydra()
+    }
+  }
+  
   isVarying( func, varies=false, a=null, b=null ) {
     func.varies = func.varies || varies || (a !== null && a.varies ) || (b !== null && b.varies )
-  },
+  }
 
   mathwalk( obj ) {
     let out = EFN, a, b
-    const varies = screamer.isVarying
+    const varies = this.isVarying
     if( Array.isArray( obj ) ) { 
       if( obj.length > 1 ) {
-        const a = screamer.mathwalk( obj[2] )
-        const b = obj[3] !== undefined ? screamer.mathwalk( obj[3] ) : null
+        const a = this.mathwalk( obj[2] )
+        const b = obj[3] !== undefined ? this.mathwalk( obj[3] ) : null
 
         let lastlow = 0, lastmid = 0, lasthigh = 0
         const op = obj[1]                  
@@ -136,7 +154,7 @@ const screamer = {
             // .start() is a null operation if audio
             // has already been initialized
             Marching.FFT.start()
-            Marching.FFT.windowSize = screamer.config.fft
+            Marching.FFT.windowSize = this.config.fft
 
             out = t => {
               lastlow = Marching.FFT.low * (1.0 - a(t)) + lastlow * a(t)
@@ -146,7 +164,7 @@ const screamer = {
             break
           case 'mid':
             Marching.FFT.start()
-            Marching.FFT.windowSize = screamer.config.fft
+            Marching.FFT.windowSize = this.config.fft
             
             out = t => {
               lastmid = Marching.FFT.mid * (1.0 - a(t)) + lastmid * a(t)
@@ -157,7 +175,7 @@ const screamer = {
             break
           case 'high':
             Marching.FFT.start()
-            Marching.FFT.windowSize = screamer.config.fft
+            Marching.FFT.windowSize = this.config.fft
 
             out = t => {
               lasthigh = Marching.FFT.high * (1.0 - a(t)) + lasthigh * a(t)
@@ -191,7 +209,7 @@ const screamer = {
             break
                     }
       }else{
-        out = screamer.mathwalk( obj[0] )
+        out = this.mathwalk( obj[0] )
       }
     }else if( typeof obj === 'string' ) {       
       if( obj[0] === '\\' ) {
@@ -210,7 +228,7 @@ const screamer = {
       }else{
         switch( obj ) {
           case 'i' : 
-            const i = screamer.__i
+            const i = this.__i
             out = t => i
             break
           case 'time': 
@@ -230,19 +248,19 @@ const screamer = {
             // .start() is a null operation if audio
             // has already been initialized
             Marching.FFT.start()
-            Marching.FFT.windowSize = screamer.config.fft
+            Marching.FFT.windowSize = this.config.fft
             out = t => Marching.FFT.low || 0 
             varies( out, true )
             break
           case 'mid':
             Marching.FFT.start()
-            Marching.FFT.windowSize = screamer.config.fft
+            Marching.FFT.windowSize = this.config.fft
             out = t => Marching.FFT.mid || 0
             varies( out, true )
             break
           case 'high':
             Marching.FFT.start()
-            Marching.FFT.windowSize = screamer.config.fft
+            Marching.FFT.windowSize = this.config.fft
             out = t => Marching.FFT.high || 0
             varies( out, true )
             break
@@ -270,18 +288,16 @@ const screamer = {
     }
 
     return out
-  },
+  }
 
-  
-  walkers: {
-    assignment( obj ) {
+  assignment( obj ) {
       let out = obj
       if( obj[1].indexOf('.') === -1 ) {
-        globals[ obj[1] ] = screamer.walk( obj[2] )
+        globals[ obj[1] ] = this.walk( obj[2] )
         out = globals[ obj[1] ]
       }else{
         const split = obj[1].split('.')
-        let value = screamer.walk( obj[2] ),
+        let value = this.walk( obj[2] ),
           __obj = globals[ split[0] ]
 
         if( typeof value === 'function' ) {
@@ -297,7 +313,7 @@ const screamer = {
           const vec = window[ `Vec${value.length}` ](0)
 
           for( let i = 0; i < value.length; i++ ) {
-            const v = screamer.mathwalk( value[ i ] )
+            const v = this.mathwalk( value[ i ] )
             if( typeof v === 'function' ) {
               const fnc = time => {
                 vec[ vecMembers[ i ] ] = v( time )
@@ -317,13 +333,13 @@ const screamer = {
       }
       
       return out
-    },
+  }
 
-    color( obj ) {
+  color( obj ) {
       return false
-    },
+  }
 
-    combinator( obj ) {
+  combinator( obj ) {
       const constructor = window[ obj[1] ]
       const args = []
       for( let i = 2; i < obj.length; i++ ) {
@@ -331,15 +347,15 @@ const screamer = {
         if( isList ) {
           if( i === 4 ) {
             obj[i].forEach( v => {
-              args.push( Array.isArray(v) ? screamer.walk(v) : v )
+              args.push( Array.isArray(v) ? this.walk(v) : v )
             })
           }else{
-            args.push( screamer.walk( obj[ i ] ) )
+            args.push( this.walk( obj[ i ] ) )
           }
         }else{
           if( !Array.isArray( obj[i] ) ) {
             if( obj[i] !== null && obj[i] !== undefined )
-              args.push( screamer.walk( obj[ i ] ) )
+              args.push( this.walk( obj[ i ] ) )
           }else{
             args.push( ...obj[i] )
           }
@@ -347,15 +363,15 @@ const screamer = {
       }
 
       return constructor( ...args )
-    },
+  }
 
-    comment() { return false },
+  comment() { return false }
 
-    config( obj ) {
+  configWalk( obj ) {
       if( obj[1] === 'lighting' ) {
         const lights = obj[2].values
 
-        screamer.config.lighting = []
+        this.config.lighting = []
 
         for( const __light of lights ) {
           const lightdesc = __light[1][1]
@@ -366,10 +382,10 @@ const screamer = {
             lightdesc[2] || 1 
           )
 
-          screamer.config.lighting.push( light )
+          this.config.lighting.push( light )
 
-          const posfncs = lightdesc[0][1].map( screamer.mathwalk )
-          const colfncs = lightdesc[1][1].map( screamer.mathwalk )
+          const posfncs = lightdesc[0][1].map( this.mathwalk.bind(this) )
+          const colfncs = lightdesc[1][1].map( this.mathwalk.bind(this) )
           Marching.postrendercallbacks.push( time => {
             if( posfncs[0].varies ) light.pos.x = posfncs[0]( time )
             if( posfncs[1].varies ) light.pos.y = posfncs[1]( time )
@@ -431,7 +447,7 @@ const screamer = {
             if( key === '__wrapped__' ) continue
 
             if( v[1] !== null ) {
-              __args = v[1].map( screamer.mathwalk )
+              __args = v[1].map( this.mathwalk.bind(this) )
               let num = idx++
               
               // will be undefined if no value for this argument
@@ -452,7 +468,7 @@ const screamer = {
       // test for string in case of render preset
       
       if( obj[1] === 'camera' ) {
-        const camerafncs = obj[2].values.map( screamer.mathwalk )
+        const camerafncs = obj[2].values.map( this.mathwalk.bind(this) )
         if( camerafncs.findIndex( f => f.varies === true ) !== -1 ) {
           Marching.postrendercallbacks.push( time => {
             if( camerafncs[0].varies ) camera.pos.x = camerafncs[0]( time )
@@ -460,12 +476,12 @@ const screamer = {
             if( camerafncs[2].varies ) camera.pos.z = camerafncs[2]( time )
           })
         }else{
-          screamer.DO_NOT_RESET_CAMERA=true
+          this.DO_NOT_RESET_CAMERA=true
           setTimeout( ()=> {
             camera.pos.x = camerafncs[0]( 0 )
             camera.pos.y = camerafncs[1]( 0 )
             camera.pos.z = camerafncs[2]( 0 )
-            screamer.DO_NOT_RESET_CAMERA=false
+            this.DO_NOT_RESET_CAMERA=false
           }, 0 )
         }
 
@@ -475,9 +491,9 @@ const screamer = {
       if( obj[1] === 'fog' ) {
         let fogfncs
         if( obj[2].values === undefined ) {
-          fogfncs = [ screamer.mathwalk( obj[2] ) ]
+          fogfncs = [ this.mathwalk( obj[2] ) ]
         }else{
-          fogfncs = obj[2].values.map( screamer.mathwalk )
+          fogfncs = obj[2].values.map( this.mathwalk.bind(this) )
         }
         const runfog = time => {
           const fog = Marching.__scene.postprocessing[0]
@@ -504,17 +520,17 @@ const screamer = {
       if( obj[1] === 'foreground' ) {
         const c = obj[2].values
         const m = Material( 'phong', Vec3(...(c.map( v=>v*.1))), Vec3(...c), Vec3(1), c[3] || 32, Vec3(0))
-        screamer.config.foreground = m 
+        this.config.foreground = m 
       }
 
       const isPreset = Array.isArray( obj[2] ) 
         || (typeof obj[2] === 'string' || typeof obj[2] === 'number' )
 
       if( obj[1] !== 'foreground' )
-        screamer.config[ obj[1] ] = isPreset ? obj[2] : obj[2].values
+        this.config[ obj[1] ] = isPreset ? obj[2] : obj[2].values
 
       return false
-    },
+    }
 
     geometry( obj ) {
       const constructor = window[ obj[1] ]
@@ -522,11 +538,11 @@ const screamer = {
       for( let i = 2; i < obj.length; i++ ) {
         const isArgList = Array.isArray( obj[ i ] ) && obj[i].length !== 0 
         if( isArgList ) {
-          args.push( ...obj[ i ].map( screamer.walk ))
+          args.push( ...obj[ i ].map( this.walk.bind(this) ))
         }else{
           if( !Array.isArray( obj[i] ) ) {
             if( obj[i] !== null && obj[i] !== undefined )
-              args.push( screamer.walk( obj[ i ] ) )
+              args.push( this.walk( obj[ i ] ) )
           }else{
             // hmmm what is this?
             args.push( ...obj[i] )
@@ -542,44 +558,44 @@ const screamer = {
         return f.varies ? f : typeof f === 'function' ? f(0) : f 
       })
       const geo = constructor( ...args )
-      if( screamer.config.foreground !== null ) {
-        geo.material( screamer.config.foreground )
+      if( this.config.foreground !== null ) {
+        geo.material( this.config.foreground )
       }
 
       return geo
-    },
+  }
 
-    hydra( obj ) {
+  hydra( obj ) {
       console.log( 'hydra:', obj[1] )
       new Function( obj[1] )()
       return false
-    },
+  }
 
-    loop( obj ) {
-      let out = screamer.walk( obj[1] )
+  loop( obj ) {
+      let out = this.walk( obj[1] )
       const mods = obj[3]
       const count = obj[2]
       for( let i = 0; i < count; i++ ) {
-        screamer.__i = i
-        out = screamer.walkers.mod( mods, out )
+        this.__i = i
+        out = this.walkers.mod( mods, out )
       }
 
       return out
-    },
+  }
 
-    math( obj ) { return screamer.mathwalk( obj ) },
+  math( obj ) { return this.mathwalk( obj ) }
 
-    osc( obj ) {
+  oscWalk( obj ) {
       const addr = obj[2][0][1]
       if( osc[ addr ] === undefined ) osc[ addr ] = 0
       return obj
-    },
+  }
 
-    mod( obj, __geo = null ) {
+  mod( obj, __geo = null ) {
       let out = null
       
       let geo = __geo === null 
-        ? screamer.walk( obj[1] )
+        ? this.walk( obj[1] )
         : __geo
       
       // "normal" call vs call in loop
@@ -611,26 +627,26 @@ const screamer = {
             throw SyntaxError(`Are you missing an argument to your ${mod[0]} (${name}) modifier?`) 
           }
           if( mod[1].name === 'list' ) {
-            args = mod[1].values.map( screamer.mathwalk )
+            args = mod[1].values.map( this.mathwalk.bind(this) )
             isList = true
           }else{
             args = []
-            //args = screamer.mathwalk( mod[1] )
+            //args = this.mathwalk( mod[1] )
           }
 
           if( usesDims ) {
             if( dims.indexOf( 'x' ) !== -1 ) {
-              args[0] = isList ? args[0] : screamer.mathwalk( mod[1] )
+              args[0] = isList ? args[0] : this.mathwalk( mod[1] )
             }else{
               args[0] = null
             }
             if( dims.indexOf( 'y' ) !== -1 ) {
-              args[1] = isList ? args[1] : screamer.mathwalk( mod[1] ) 
+              args[1] = isList ? args[1] : this.mathwalk( mod[1] ) 
             }else{
               args[1] = null
             }
             if( dims.indexOf( 'z' ) !== -1 ) {
-              args[2] = isList ? args[2] : screamer.mathwalk( mod[1] ) 
+              args[2] = isList ? args[2] : this.mathwalk( mod[1] ) 
             }else{
               args[2] = null
             }
@@ -654,7 +670,7 @@ const screamer = {
             geo.transform.shouldRotate = false
 
             const idx = geo.transform.__rotations.length
-            args[0] = screamer.mathwalk( mod[1] )
+            args[0] = this.mathwalk( mod[1] )
 
             const x = usesDims ? +!(dims.indexOf('x') === -1) : 1
             const y = usesDims ? +!(dims.indexOf('y') === -1) : 1
@@ -688,7 +704,7 @@ const screamer = {
               if( usesDims ) {
                 out = geo[ name ]( ...args )  
               }else{
-                let v = screamer.mathwalk( mod[1] )
+                let v = this.mathwalk( mod[1] )
                 if( v.varies === false ) v = v(0) 
                 out = geo[ name ]( v,v,v ) 
               }
@@ -703,14 +719,14 @@ const screamer = {
               let idx = name === 'bump' ? 2 : 1
 
               let scalefnc = null
-              if( mod[1][idx] !== undefined ) scalefnc = screamer.mathwalk( mod[1][idx] )
+              if( mod[1][idx] !== undefined ) scalefnc = this.mathwalk( mod[1][idx] )
               let uvfncs = null
               if( mod[1][idx+1] !== undefined ) {
-                uvfncs = mod[1][idx+1][1].map( screamer.mathwalk )
+                uvfncs = mod[1][idx+1][1].map( this.mathwalk.bind(this) )
               }
               let strengthfnc = null
               if( mod[1][idx+2] !== undefined ) {
-                strengthfnc = screamer.mathwalk( mod[1][idx+2] )
+                strengthfnc = this.mathwalk( mod[1][idx+2] )
               }
 
               const props = { 
@@ -719,7 +735,7 @@ const screamer = {
                 strength: strengthfnc !== null ? strengthfnc( 0 ) : 1
               }
               const t = materialName === 'hydra'
-                ? screamer.textures.hydra( props ) 
+                ? this.textures.hydra( props ) 
                 : Texture( materialName, props ) 
               
               if( scalefnc !== null || uvfncs !== null ) {
@@ -753,17 +769,17 @@ const screamer = {
                     out = geo[ name ]( materialName )
                   }
                 }else{
-                  //screamer.use( 'hydra' )
+                  //this.use( 'hydra' )
                   
-                  if( typeof screamer.textures.hydra !== 'function' ) {
+                  if( typeof this.textures.hydra !== 'function' ) {
                     console.warn( `hydra wasn't loaded; we'll load it now. you can load hydra using ctrl+alt+h` )
                     out = geo
                   }else{
-                    if( screamer.libs.hydra === undefined ) {
+                    if( this.libs.hydra === undefined ) {
                       console.warn( 'resetting hydra texture after clear. please re-run' )
                       out = geo
                     }else{
-                      const t = screamer.textures.hydra()
+                      const t = this.textures.hydra()
                       out = geo.texture( t )
                     }
                   }
@@ -773,7 +789,7 @@ const screamer = {
                 out = geo.texture( t ).bump( t, .1 )
               } else if( name === 'textureTranslate' ) {
                 const dims = Array.isArray( mod[0] ) ? mod[0][1] : 'all'
-                const func = screamer.mathwalk( mod[1] )
+                const func = this.mathwalk( mod[1] )
                 Marching.postrendercallbacks.push( time => {
                   const tex = (geo.tex !== undefined && geo.tex.uv !== undefined ) ? geo.tex : geo.texture
                   if( func !== null && tex.uv !== undefined ) {
@@ -797,7 +813,7 @@ const screamer = {
           }else{
             if( name === 'textureTranslate' ) {
               const dims = Array.isArray( mod[0] ) ? mod[0][1] : 'all'
-              const func = screamer.mathwalk( mod[1] )
+              const func = this.mathwalk( mod[1] )
               const tex = (geo.tex !== undefined && geo.tex.uv !== undefined ) ? geo.tex : geo.texture
               Marching.postrendercallbacks.push( time => {
                 if( func !== null && tex.uv !== undefined ) {
@@ -820,27 +836,27 @@ const screamer = {
               let args, isList = false
               
               if( mod[1].name === 'list' ) {
-                args = mod[1].values.map( screamer.mathwalk )
+                args = mod[1].values.map( this.mathwalk.bind(this) )
                 isList = true
               }else{
                 args = []
-                //args = screamer.mathwalk( mod[1] )
+                //args = this.mathwalk( mod[1] )
               }
 
               const DNR = 123456 // do not repeat 
               if( usesDims ) {
                 if( dims.indexOf( 'x' ) !== -1 ) {
-                  args[0] = isList ? args[0] : screamer.mathwalk( mod[1] )
+                  args[0] = isList ? args[0] : this.mathwalk( mod[1] )
                 }else{
                   args[0] = DNR
                 }
                 if( dims.indexOf( 'y' ) !== -1 ) {
-                  args[1] = isList ? args[1] : screamer.mathwalk( mod[1] ) 
+                  args[1] = isList ? args[1] : this.mathwalk( mod[1] ) 
                 }else{
                   args[1] = DNR
                 }
                 if( dims.indexOf( 'z' ) !== -1 ) {
-                  args[2] = isList ? args[2] : screamer.mathwalk( mod[1] ) 
+                  args[2] = isList ? args[2] : this.mathwalk( mod[1] ) 
                 }else{
                   args[2] = DNR
                 }
@@ -867,7 +883,7 @@ const screamer = {
                   }
                 }
               }else{
-                args = isList ? args : screamer.mathwalk( mod[1] ) 
+                args = isList ? args : this.mathwalk( mod[1] ) 
                 if( isList ) 
                   args = args.map( v => v.varies ? v : v(0) ) 
                 else
@@ -897,11 +913,11 @@ const screamer = {
                   // TODO: fix so smoothmirror can accept different
                   // arguments on different axes (this is a marching.js fix)
                  
-                  //const __args = mod[1].values.map( screamer.mathwalk )
+                  //const __args = mod[1].values.map( this.mathwalk )
                   //console.log( 'args:', __args )
                   //out = isList && count !== 1
                   //  ? window[ name ]( geo, window['Vec'+count]( ...__args ), dims )
-                  //  : window[ name ]( geo, screamer.mathwalk( mod[1].values[0] ), dims )
+                  //  : window[ name ]( geo, this.mathwalk( mod[1].values[0] ), dims )
                 //}else{
                 if( isList ) {
                   const l = mod[1].values.length
@@ -909,15 +925,15 @@ const screamer = {
                   if( l !==1 )
                     console.warn( 'smoothmirror only accepts a single smoothness value for all axes.')
                 }
-                let __args = screamer.mathwalk( mod[1] )
+                let __args = this.mathwalk( mod[1] )
                 if( __args.varies === false ) __args = __args(0)
 
                 out = window[ name ]( geo, __args, dims )
                 //}
               }else{
                 out = typeof mod[1] === 'object' && typeof mod[1].values !== 'function'
-                  ? window[ name ]( geo, ...mod[1].values.map( screamer.mathwalk ) )
-                  : window[ name ]( geo, screamer.mathwalk( mod[1] ) )
+                  ? window[ name ]( geo, ...mod[1].values.map( this.mathwalk.bind(this) ) )
+                  : window[ name ]( geo, this.mathwalk( mod[1] ) )
               }
             }
           }else{
@@ -941,47 +957,44 @@ const screamer = {
       }
 
       return out
-    },
+  }
 
-    string( obj ) { 
+  string( obj ) { 
       const isGlobal = globals[ obj ] !== undefined
-      const out = isGlobal ? globals[ obj ] : screamer.mathwalk( obj )
-
-
+      const out = isGlobal ? globals[ obj ] : this.mathwalk( obj )
       
       if( out === EFN ) throw ReferenceError(`The word ${obj} is not a keyword in screamer, and it is not a variable that has been assigned a value`)
 
       return out
-    },
+  }
 
-    vec( obj ) {
+  vec( obj ) {
       const len = obj[1].length
-      const args = obj[1].map( screamer.mathwalk ).map( f => f.varies ? f : f(0) )
+      const args = obj[1].map( this.mathwalk.bind(this) ).map( f => f.varies ? f : f(0) )
 
       return window[ 'Vec'+len ]( ...args )
-    }
-  },
+  }
 
   walk( obj ) {
     let out = obj
-    const isFnc = obj[0] in screamer.walkers
+    const isFnc = obj[0] in this.walkers
 
     if( !isFnc ) {
       if( typeof obj[0] === 'string' ) {
-        out = screamer.walkers.string( obj )
+        out = this.walkers.string( obj )
       }
     }else{
-      out = screamer.walkers[ obj[0] ]( obj )
+      out = this.walkers[ obj[0] ]( obj )
     }
 
     return out
-  },
+  }
 
   run( code, dims=null ) {
       console.log( 'screamer:', code )
       let tree = null
       try{
-        tree = screamerlang.parse( code )
+        tree = parse( code )
       }catch(e) {
         console.error( e.toString() )
         return
@@ -989,10 +1002,10 @@ const screamer = {
       let out
 
       for( let s of tree ) {
-        out = screamer.walk(s)
+        out = this.walk(s)
       }
 
-      const config = screamer.config
+      const config = this.config
       if( out !== false ) {
         let m = march( out )
           .fog( 
@@ -1020,10 +1033,10 @@ const screamer = {
           m = m.resolution( config.zoom )
         }
 
-        screamer.scene = m.render( config.render )
+        this.scene = m.render( config.render )
          .camera( ...config.camera )
       }
-  },
+  }
 
   initHydra() {
     if( window.Hydra !== undefined ) {
@@ -1052,14 +1065,13 @@ const screamer = {
         return t
       }
 
-      screamer.libs.hydra = hydra
-      screamer.textures.hydra = props => hydra.synth.texture( props )
+      this.libs.hydra = hydra
+      this.textures.hydra = props => hydra.synth.texture( props )
     }else{
       console.warn( 'hydra was not loaded' )
     }
-  },
+  }
 
-  libs: {}
 }
 
-export default screamer
+export default Screamer 

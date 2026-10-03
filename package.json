@@ -4,7 +4,8 @@
   "description": "A domain-specific language for live coding performances using ray marching",
   "main": "index.js",
   "scripts": {
-    "grammar": "npx peggy screamer.pegjs -o screamer-lang.js -e screamerlang --format globals"
+    "grammar": "npx peggy screamer.pegjs -o screamer-lang2.js --format es",
+    "build": "browserify ./index.js -p esmify --standalone Screamer > dist/screamer.js"
   },
   "keywords": [
     "live",
@@ -20,6 +21,8 @@
     "marching": "^1.1.4"
   },
   "devDependencies": {
-    "peggy": "^4.0.2"
+    "peggy": "^4.0.2",
+    "browserify": "^17.0.0",
+    "esmify": "^2.1.1"
   }
 }

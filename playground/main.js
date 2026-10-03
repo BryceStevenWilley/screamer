@@ -1,7 +1,7 @@
 import { demos } from './demos.js'
 import tutorial from './tutorial.js' 
 import intro    from './intro.js'
-import screamer from '../screamer.js'
+import Screamer from '../screamer.js'
 import rules from './highlight.js'
 
 demos.unshift( tutorial )
@@ -10,6 +10,7 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test( navigator.userAgent )
 
 let run
 let introEle = null
+let screamer
 
 const removeIntro = function() {
   if( introEle !== null ) {
@@ -22,7 +23,7 @@ const removeIntro = function() {
 
 let teeny = null, editor = null
 const init = async function() {
-  screamer.init()
+  screamer = new Screamer({});
   const canvas = setupMarching()
   Marching.materials.__clearOnEmit = false
 
